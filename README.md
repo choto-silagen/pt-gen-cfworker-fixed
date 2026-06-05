@@ -41,6 +41,7 @@ npm run dev
 - 启动命令: `npm start`
 - 实际启动文件: `dist/server.cjs`
 - 端口: 使用 aPanel 分配的 `PORT` 环境变量；未设置时默认 `3000`。
+- PM2 配置文件: `ecosystem.config.cjs`
 
 手动部署：
 
@@ -53,6 +54,12 @@ PORT=3000 npm start
 ```
 
 如果 aPanel 需要填写反向代理目标，填项目实际监听端口，例如 `http://127.0.0.1:3000`。
+
+如果 aPanel 使用 PM2 管理进程，也可以在构建完成后运行：
+
+```bash
+pm2 start ecosystem.config.cjs
+```
 
 默认 `wrangler.toml` 不包含密钥，可以直接提交。需要 KV 缓存时，把 KV namespace 加到 `wrangler.toml`：
 
