@@ -6,11 +6,11 @@
   "scripts": {
     "build": "webpack --mode=production",
     "start": "node dist/server.cjs",
-    "dev": "wrangler dev",
+    "dev": "npx wrangler@4.98.0 dev",
     "dev:node": "npm run build && node dist/server.cjs",
-    "deploy": "wrangler deploy",
-    "preview": "wrangler dev",
-    "publish": "wrangler deploy",
+    "deploy": "npx wrangler@4.98.0 deploy",
+    "preview": "npx wrangler@4.98.0 dev",
+    "publish": "npx wrangler@4.98.0 deploy",
     "test": "npm run build"
   },
   "author": "Rhilip <rhilipruan@gmail.com>",
@@ -22,7 +22,6 @@
   "devDependencies": {
     "html-loader": "^5.1.0",
     "webpack": "^5.101.3",
-    "webpack-cli": "^6.0.1",
-    "wrangler": "^4.98.0"
+    "webpack-cli": "^6.0.1"
   }
 }
