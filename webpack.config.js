@@ -1,12 +1,6 @@
 const path = require("path");
 
-module.exports = {
-  target: 'webworker',
-  entry: './index.js',
-  output: {
-    filename: 'worker.js',
-    path: path.resolve(__dirname, 'dist')
-  },
+const htmlRule = {
   module: {
     rules: [
       {
@@ -20,3 +14,29 @@ module.exports = {
     ],
   },
 };
+
+module.exports = [
+  {
+    name: "worker",
+    target: 'webworker',
+    entry: './index.js',
+    output: {
+      filename: 'worker.js',
+      path: path.resolve(__dirname, 'dist')
+    },
+    ...htmlRule
+  },
+  {
+    name: "server",
+    target: 'node18',
+    entry: './server.js',
+    output: {
+      filename: 'server.cjs',
+      path: path.resolve(__dirname, 'dist')
+    },
+    experiments: {
+      outputModule: false
+    },
+    ...htmlRule
+  }
+];
