@@ -1,62 +1,87 @@
-> [!NOTE]
-> 本项目已停止维护，你可以使用下面项目作为替代：
-> - https://github.com/YunFeng86/pt-gen-universal
-> - https://github.com/rabbitwit/PT-Gen-Refactor
+# PT-Gen on Cloudflare Workers
 
-# PT-Gen on Cloudflare Worker
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FRhilip%2Fpt-gen-cfworker.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2FRhilip%2Fpt-gen-cfworker?ref=badge_shield)
-[![Build Status](https://github.com/Rhilip/pt-gen-cfworker/actions/workflows/build.yml/badge.svg)](https://github.com/Rhilip/pt-gen-cfworker/actions/workflows/build.yml)
+这是一个修复后的 `pt-gen-cfworker` 版本，基于 [Rhilip/pt-gen-cfworker](https://github.com/Rhilip/pt-gen-cfworker) 继续维护，使 PT-Gen 可以用现代 Wrangler 部署到 Cloudflare Workers。
 
-基于 [BFDZ/Pt-Gen v0.4.7](https://github.com/BFDZ/PT-Gen/commit/950b85de16d9532e847a0756f165d1b29f09dd31) 改写，
-使之可以直接在Cloudflare Worker上使用。
+## 修复重点
 
-如果你没有构造环境，请直接复制使用 [build分支](https://github.com/Rhilip/pt-gen-cfworker/tree/build) 下的
-[script.js](https://github.com/Rhilip/pt-gen-cfworker/blob/build/script.js) 文件。
+- 更新到 Wrangler 4 的构建和部署方式。
+- 修复 `package-lock.json` 中过期的淘宝 npm 源，干净环境可直接安装依赖。
+- 修复 JSON 响应默认体被复用污染的问题。
+- Douban 详情改用移动页和 `subject_abstract` 组合解析，避免桌面页验证跳转导致生成失败。
+- Bangumi 详情改用 v0 JSON API，恢复 Staff、Cast、标签和评分。
+- Steam 修复官网链接、语言支持判断和标题重复问题。
+- Epic 修复新版商店内容字段缺失时的崩溃。
+- Indienova 修复空元素判断和链接输出。
+- IMDb 搜索可用；IMDb 详情页目前经常被 AWS WAF 拦截，Worker 会返回明确错误，不再抛内部异常。
 
-否则请参照 `.Travis.yml` 文件构造方法，直接使用`wrangler`搭建Cloudflare-Worker。
+## 部署
 
-## 本项目请求方法
+```bash
+npm install
+npm run build
+npm run deploy
+```
 
-API Point：
- - https://ptgen.rhilip.info/
- - **！！！大批量请求时，请勿使用测试DEMO站点，请自己搭建cf-worker！！！**
+本地调试：
 
-`资源搜索` 请求字段：
-  - search: 搜索字符串
-  - source: 见下表 `资源来源站点`，不填时默认为 `douban`
+```bash
+npm run dev
+```
 
-`简介生成` 请求字段（方法1，推荐）：
-  - url：见下表 `链接格式（Regexp）`
+默认 `wrangler.toml` 不包含密钥，可以直接提交。需要 KV 缓存时，把 KV namespace 加到 `wrangler.toml`：
 
-`简介生成` 请求字段（方法2）：
-  - site: 见下表 `资源来源站点`
-  - sid: 资源在对应站点的唯一id
+```toml
+kv_namespaces = [
+  { binding = "PT_GEN_STORE", id = "your-kv-namespace-id" }
+]
+```
 
-## 支持资源链接
+## 请求方式
 
-| 资源来源站点 | 搜索支持 | 链接格式（Regexp） |
-| :---: | :---: | :------|
-| douban | √ | `/(?:https?:\/\/)?(?:(?:movie\|www)\.)?douban\.com\/(?:subject\|movie)\/(\d+)\/?/` |
-| imdb | √ | `/(?:https?:\/\/)?(?:www\.)?imdb\.com\/title\/(tt\d+)\/?/` |
-| bangumi | √ | `/(?:https?:\/\/)?(?:bgm\.tv\|bangumi\.tv\|chii\.in)\/subject\/(\d+)\/?/` |
-| steam | × | `/(?:https?:\/\/)?(?:store\.)?steam(?:powered\|community)\.com\/app\/(\d+)\/?/` |
-| indienova | × | `/(?:https?:\/\/)?indienova\.com\/game\/(\S+)/` | 
-| epic | × | `/(?:https?:\/\/)?www\.epicgames\.com\/store\/[a-zA-Z-]+\/product\/(\S+)\/\S?/` |
+搜索：
 
-> update 2020.11.23 : 由于 steam 服务器对于 cf-worker 访问进行限制 （ 见[#10](https://github.com/Rhilip/pt-gen-cfworker/issues/10) ）， 目前服务的 steam 相关资源生成均无法使用。
+```text
+/?search=关键词&source=douban
+```
 
-## 环境变量及 KV 命名空间
+生成：
 
-通过设置环境变量可以使得 pt-gen-cfworker 能够实现一些额外的功能，当前有以下 环境变量：
+```text
+/?url=https://movie.douban.com/subject/1292052/
+/?site=douban&sid=1292052
+```
+
+## 支持来源
+
+| 来源 | 搜索 | 生成 | 说明 |
+| --- | --- | --- | --- |
+| douban | 支持 | 支持 | 详情使用移动页和摘要接口 |
+| bangumi | 支持 | 支持 | 详情使用 Bangumi v0 API |
+| imdb | 支持 | 受限 | 详情页可能被 AWS WAF 拦截 |
+| steam | 不支持 | 支持 | Steam 仍可能按访问来源限制请求 |
+| indienova | 不支持 | 支持 | 可配置 `INDIENOVA_COOKIE` |
+| epic | 不支持 | 支持 | 支持新版 `store.epicgames.com/.../p/{slug}` 链接 |
+
+## 环境变量
 
 | 变量 | 说明 |
-|:---:|:--|
-| `AUTHOR` | 用于重写api返回的作者信息 |
-| `APIKEY` | 只允许带有 `&apikey={APIKEY}` 的请求访问资源 |
-| `DISABLE_SEARCH` | 存在该值且非空时，禁止使用搜索功能 |
-| `PT_GEN_STORE` | *KV Storage*，请在 `KV 命名空间绑定` 面板而不是环境变量面板设置！！！ |
-| `DOUBAN_COOKIE` | 豆瓣Cookie，使得能访问部分登录可见的资源 |
-| `INDIENOVA_COOKIE` | indienova 的 Cookie，见 [#15](https://github.com/Rhilip/pt-gen-cfworker/issues/15) |
+| --- | --- |
+| `AUTHOR` | 重写返回里的作者名 |
+| `APIKEY` | 启用后请求必须携带 `&apikey={APIKEY}` |
+| `DISABLE_SEARCH` | 设置为非空值时禁用搜索 |
+| `DOUBAN_COOKIE` | 豆瓣 Cookie，可提高部分详情页访问成功率 |
+| `INDIENOVA_COOKIE` | Indienova Cookie |
+| `PT_GEN_STORE` | Cloudflare KV binding，用于缓存生成结果 |
+
+## 验证结果
+
+本地 Worker 烟测覆盖了 Douban、Bangumi、IMDb、Steam、Epic、Indienova：
+
+- Douban 搜索和详情生成成功。
+- Bangumi 搜索和详情生成成功。
+- IMDb 搜索成功，详情返回上游阻断错误。
+- Steam、Epic、Indienova 详情生成成功。
 
 ## License
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2FRhilip%2Fpt-gen-cfworker.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2FRhilip%2Fpt-gen-cfworker?ref=badge_large)
+
+MIT

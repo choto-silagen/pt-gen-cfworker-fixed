@@ -2,35 +2,22 @@ name: Build
 
 on:
   push:
-    branches:
-      - master
+  pull_request:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    name: Deploy
+    name: Build worker
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Install Wrangler
-        run: npm i @cloudflare/wrangler -g
-
-      - name: Publish to Cloudflare
-        run: |
-          echo '${{ secrets.WRANGLER }}' > wrangler.toml
-          wrangler publish
-        env:
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-
-      - name: Release Build Script
-        run: |
-          cd worker
-          git init
-          git add *
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git commit -m "Auto build" -a
-          git push --force --quiet "https://${GITHUB_ACTOR}:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" master:build
+      - name: Build
+        run: npm run build

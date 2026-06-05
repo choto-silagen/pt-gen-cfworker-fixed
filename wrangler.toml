@@ -7,10 +7,4 @@ workers_dev = true
 command = "npm run build"
 
 [vars]
-# AUTHOR = "your-name"
-# APIKEY = "your-secret"
-# DISABLE_SEARCH = "1"
 
-kv_namespaces = [
-  { binding = "PT_GEN_STORE", id = "" }
-]

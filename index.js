@@ -20,10 +20,10 @@ const support_list = {
   // 注意value值中正则的分组只能有一个，而且必须是sid信息，其他分组必须设置不捕获属性
   "douban": /(?:https?:\/\/)?(?:(?:movie|www)\.)?douban\.com\/(?:subject|movie)\/(\d+)\/?/,
   "imdb": /(?:https?:\/\/)?(?:www\.)?imdb\.com\/title\/(tt\d+)\/?/,
-  "bangumi": /(?:https?:\/\/)?(?:bgm\.tv|bangumi\.tv|chii\.in)\/subject\/(\d+)\/?/,
+  "bangumi": /(?:https?:\/\/)?(?:bgm\.tv|bangumi\.tv|chii\.in|next\.bgm\.tv)\/subject\/(\d+)\/?/,
   "steam": /(?:https?:\/\/)?(?:store\.)?steam(?:powered|community)\.com\/app\/(\d+)\/?/,
   "indienova": /(?:https?:\/\/)?indienova\.com\/game\/(\S+)/,
-  "epic": /(?:https?:\/\/)?www\.epicgames\.com\/store\/[a-zA-Z-]+\/product\/(\S+)\/\S?/
+  "epic": /(?:https?:\/\/)?(?:www\.)?(?:epicgames|store\.epicgames)\.com\/(?:store\/[a-zA-Z-]+\/(?:product|p)|site\/[a-zA-Z-]+\/p|[a-zA-Z-]+\/p)\/([^/?#]+)\/?/
 };
 
 const support_site_list = Object.keys(support_list);
@@ -153,8 +153,9 @@ async function handle(event) {
       }
 
 
-      // 添加缓存，此处如果response如果为undefined的话会抛出错误
-      event.waitUntil(cache.put(request, response.clone()));
+      if (request.method === "GET" && response && response.status === 200) {
+        event.waitUntil(cache.put(request, response.clone()));
+      }
     } catch (e) {
       let err_return = {
         error: `Internal Error, Please contact @${AUTHOR}. Exception: ${e.message}`
