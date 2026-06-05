@@ -5,9 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "webpack --mode=production",
-    "start": "node dist/server.cjs",
     "dev": "npx wrangler@4.98.0 dev",
-    "dev:node": "npm run build && node dist/server.cjs",
     "deploy": "npx wrangler@4.98.0 deploy",
     "preview": "npx wrangler@4.98.0 dev",
     "publish": "npx wrangler@4.98.0 deploy",

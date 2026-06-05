@@ -15,28 +15,12 @@ const htmlRule = {
   },
 };
 
-module.exports = [
-  {
-    name: "worker",
-    target: 'webworker',
-    entry: './index.js',
-    output: {
-      filename: 'worker.js',
-      path: path.resolve(__dirname, 'dist')
-    },
-    ...htmlRule
+module.exports = {
+  target: 'webworker',
+  entry: './index.js',
+  output: {
+    filename: 'worker.js',
+    path: path.resolve(__dirname, 'dist')
   },
-  {
-    name: "server",
-    target: 'node18',
-    entry: './server.js',
-    output: {
-      filename: 'server.cjs',
-      path: path.resolve(__dirname, 'dist')
-    },
-    experiments: {
-      outputModule: false
-    },
-    ...htmlRule
-  }
-];
+  ...htmlRule
+};

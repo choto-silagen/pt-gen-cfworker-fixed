@@ -16,8 +16,6 @@
 
 ## 部署
 
-### Cloudflare Workers
-
 ```bash
 npm install
 npm run build
@@ -30,37 +28,6 @@ npm run deploy
 npm run dev
 ```
 
-### aPanel / Node 项目
-
-此版本同时支持普通 Node HTTP 服务，适合在 aPanel 的 Node 项目中部署。
-
-推荐配置：
-
-- Node.js: 18 或更高版本，推荐 20/22。
-- 构建命令: `npm install && npm run build`
-- 启动命令: `npm start`
-- 实际启动文件: `dist/server.cjs`
-- 端口: 使用 aPanel 分配的 `PORT` 环境变量；未设置时默认 `3000`。
-- PM2 配置文件: `ecosystem.config.cjs`
-
-手动部署：
-
-```bash
-git clone https://github.com/choto-silagen/pt-gen-cfworker-fixed.git
-cd pt-gen-cfworker-fixed
-npm install
-npm run build
-PORT=3000 npm start
-```
-
-如果 aPanel 需要填写反向代理目标，填项目实际监听端口，例如 `http://127.0.0.1:3000`。
-
-如果 aPanel 使用 PM2 管理进程，也可以在构建完成后运行：
-
-```bash
-pm2 start ecosystem.config.cjs
-```
-
 默认 `wrangler.toml` 不包含密钥，可以直接提交。需要 KV 缓存时，把 KV namespace 加到 `wrangler.toml`：
 
 ```toml
@@ -68,6 +35,14 @@ kv_namespaces = [
   { binding = "PT_GEN_STORE", id = "your-kv-namespace-id" }
 ]
 ```
+
+部署后可以用这个条目检查豆瓣海报和简介是否正常：
+
+```text
+/?site=douban&sid=37116446
+```
+
+返回的 `format` 应该以 `[img]https://img1.doubanio.com/view/photo/l_ratio_poster/public/p2931851430.jpg[/img]` 开头，并包含“潮汕阿嬷叶淑柔……”简介。
 
 ## 请求方式
 
