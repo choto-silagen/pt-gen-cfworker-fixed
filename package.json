@@ -9,6 +9,7 @@
     "deploy": "npx wrangler@4.98.0 deploy",
     "preview": "npx wrangler@4.98.0 dev",
     "publish": "npx wrangler@4.98.0 deploy",
+    "smoke": "npm run build && node scripts/smoke-worker.cjs",
     "test": "npm run build"
   },
   "author": "Rhilip <rhilipruan@gmail.com>",
