@@ -22,17 +22,13 @@
 
 ```bash
 npm install
+cp wrangler.toml.sample wrangler.toml
+npx wrangler@4.98.0 login
 npm run smoke
 npm run deploy
 ```
 
-第一次使用 Wrangler 时需要先登录 Cloudflare：
-
-```bash
-npx wrangler@4.98.0 login
-```
-
-`wrangler.toml` 里最重要的是这几项：
+`wrangler.toml.sample` 是可提交的示例配置；实际部署前复制一份为 `wrangler.toml`，然后按自己的 Worker 名称和 KV 配置修改。里面最重要的是这几项：
 
 ```toml
 name = "ptgen"
