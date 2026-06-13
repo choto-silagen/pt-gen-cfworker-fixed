@@ -14,27 +14,100 @@
 - Indienova 修复空元素判断和链接输出。
 - IMDb 搜索可用；详情页被 AWS WAF 拦截时回退到静态 suggestion/ratings 接口生成基础条目。
 
-## 部署
+## 部署方式
+
+推荐用 Wrangler 部署；不想装 Wrangler 时，也可以把项目打包成一个 `dist/worker.js`，然后整段复制到 Cloudflare Workers 控制台。
+
+### 方式一：Wrangler 部署
 
 ```bash
 npm install
-npm run build
+npm run smoke
 npm run deploy
 ```
 
-本地调试：
+第一次使用 Wrangler 时需要先登录 Cloudflare：
 
 ```bash
-npm run dev
+npx wrangler@4.98.0 login
 ```
 
-默认 `wrangler.toml` 不包含密钥，可以直接提交。需要 KV 缓存时，把 KV namespace 加到 `wrangler.toml`：
+`wrangler.toml` 里最重要的是这几项：
+
+```toml
+name = "ptgen"
+main = "dist/worker.js"
+compatibility_date = "2026-06-05"
+workers_dev = true
+
+[build]
+command = "npm run build"
+```
+
+也就是说，Wrangler 部署前会先跑 `npm run build`，把源码和依赖打包成 `dist/worker.js`，再把这个单文件上传到 Cloudflare Workers。
+
+常用命令：
+
+```bash
+npm run dev      # 本地调试
+npm run deploy   # 部署到 Cloudflare Workers
+npm run smoke    # 构建并跑一轮 Worker 烟测
+```
+
+需要 KV 缓存时，先创建 KV namespace：
+
+```bash
+npx wrangler@4.98.0 kv namespace create PT_GEN_STORE
+```
+
+然后把返回的 `id` 填进 `wrangler.toml`：
 
 ```toml
 kv_namespaces = [
   { binding = "PT_GEN_STORE", id = "your-kv-namespace-id" }
 ]
 ```
+
+需要配置密钥或 Cookie 时，推荐用 Wrangler secret：
+
+```bash
+npx wrangler@4.98.0 secret put APIKEY
+npx wrangler@4.98.0 secret put DOUBAN_COOKIE
+npx wrangler@4.98.0 secret put INDIENOVA_COOKIE
+```
+
+非敏感变量也可以写在 `wrangler.toml` 的 `[vars]` 下面：
+
+```toml
+[vars]
+AUTHOR = "your-name"
+DISABLE_SEARCH = "1"
+```
+
+### 方式二：手动复制到 Cloudflare 控制台
+
+这种方式不需要 Wrangler 登录，只需要本地能跑 Node/npm。
+
+```bash
+npm install
+npm run build
+```
+
+构建完成后，打开：
+
+```bash
+dist/worker.js
+```
+
+在 Cloudflare 控制台里创建 Worker，然后进入在线编辑器：
+
+1. 删除编辑器里默认生成的示例代码。
+2. 把 `dist/worker.js` 的全部内容复制进去。
+3. 保存并部署。
+
+注意：不要复制 `index.js`、`app.js` 或 `lib/` 里的源码。Cloudflare 控制台里要粘贴的是打包后的单文件 `dist/worker.js`。
+
+如果要配置 `APIKEY`、`DOUBAN_COOKIE`、`INDIENOVA_COOKIE`、`DISABLE_SEARCH`、`AUTHOR` 或 KV binding，可以在 Cloudflare 控制台的 Worker 设置页里添加变量、Secret 和 KV 绑定。变量名必须和上面的名字完全一致。
 
 部署后可以用这个条目检查豆瓣海报和简介是否正常：
 
