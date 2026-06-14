@@ -1,4 +1,4 @@
-import {AUTHOR, getEnv, makeJsonResponse, makeJsonRawResponse, restoreFromKV} from "./lib/common";
+import {getAuthor, getBinding, getEnv, makeJsonResponse, makeJsonRawResponse, restoreFromKV, setRuntimeEnv} from "./lib/common";
 import debug_get_err from "./lib/error";
 
 import {search_douban, gen_douban} from "./lib/douban";
@@ -20,7 +20,9 @@ export const support_list = {
 
 const support_site_list = Object.keys(support_list);
 
-export async function handleFetch(request, ctx = {}) {
+export async function handleFetch(request, ctx = {}, env = {}) {
+  setRuntimeEnv(env);
+
   if (request.method === "OPTIONS") {
     return handleOptions(request);
   }
@@ -117,19 +119,28 @@ export async function handleFetch(request, ctx = {}) {
 
         if (response_data) {
           response = makeJsonResponse(response_data)
-          if (getEnv('PT_GEN_STORE') && globalThis['PT_GEN_STORE'] && typeof response_data.error === 'undefined') {
-            await globalThis['PT_GEN_STORE'].put(cache_key, JSON.stringify(response_data), {expirationTtl: 86400 * 2})
+          const store = getBinding('PT_GEN_STORE');
+          if (store && typeof store.put === "function" && typeof response_data.error === 'undefined') {
+            await store.put(cache_key, JSON.stringify(response_data), {expirationTtl: 86400 * 2})
           }
         }
       }
 
       if (cache && request.method === "GET" && response && response.status === 200) {
-        const waitUntil = ctx.waitUntil || (() => {});
-        waitUntil(cache.put(request, response.clone()));
+        try {
+          const cacheWrite = cache.put(request, response.clone());
+          if (ctx && typeof ctx.waitUntil === "function") {
+            ctx.waitUntil(cacheWrite.catch(() => {}));
+          } else {
+            await cacheWrite;
+          }
+        } catch (e) {
+          // Cache writes are opportunistic; never fail a successful PT-Gen response.
+        }
       }
     } catch (e) {
       let err_return = {
-        error: `Internal Error, Please contact @${AUTHOR}. Exception: ${e.message}`
+        error: `Internal Error, Please contact @${getAuthor()}. Exception: ${e.message}`
       };
 
       if (uri.searchParams.get("debug") === '1') {

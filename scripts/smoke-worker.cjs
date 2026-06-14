@@ -23,29 +23,77 @@ function configureProxy() {
   }
 }
 
-function loadWorker() {
+function configureCache() {
+  globalThis.caches = {
+    default: {
+      async match() {
+        return null;
+      },
+      async put() {
+        return undefined;
+      }
+    }
+  };
+}
+
+async function loadWorker() {
+  const source = fs.readFileSync("dist/worker.js", "utf8");
+  if (/\bexport\s*(?:\{|default\b)/.test(source)) {
+    const encoded = Buffer.from(source).toString("base64");
+    const workerModule = await import(`data:text/javascript;base64,${encoded}`);
+    if (!workerModule.default || typeof workerModule.default.fetch !== "function") {
+      throw new Error("Module worker does not export default.fetch");
+    }
+    return {
+      type: "module",
+      fetch: workerModule.default.fetch.bind(workerModule.default)
+    };
+  }
+
   let fetchHandler;
   globalThis.addEventListener = (type, handler) => {
     if (type === "fetch") fetchHandler = handler;
   };
-  vm.runInThisContext(fs.readFileSync("dist/worker.js", "utf8"), {filename: "dist/worker.js"});
+  vm.runInThisContext(source, {filename: "dist/worker.js"});
   if (!fetchHandler) throw new Error("No fetch handler registered by dist/worker.js");
-  return fetchHandler;
+  return {
+    type: "service-worker",
+    fetch: fetchHandler
+  };
 }
 
-async function workerFetch(fetchHandler, url, init = {}) {
-  let responsePromise;
+async function workerFetch(worker, url, init = {}, env = {}) {
   const request = new Request(url, init);
+  const pending = [];
+  const ctx = {
+    waitUntil(promise) {
+      if (this !== ctx) throw new TypeError("Illegal invocation: waitUntil called without ctx");
+      pending.push(Promise.resolve(promise));
+    }
+  };
+
+  if (worker.type === "module") {
+    const response = await worker.fetch(request, env, ctx);
+    await Promise.allSettled(pending);
+    return response;
+  }
+
+  let responsePromise;
   const event = {
     request,
-    waitUntil() {},
+    waitUntil(promise) {
+      if (this !== event) throw new TypeError("Illegal invocation: waitUntil called without event");
+      pending.push(Promise.resolve(promise));
+    },
     respondWith(promise) {
       responsePromise = Promise.resolve(promise);
     }
   };
-  fetchHandler(event);
+  worker.fetch(event);
   if (!responsePromise) throw new Error(`No response for ${url}`);
-  return responsePromise;
+  const response = await responsePromise;
+  await Promise.allSettled(pending);
+  return response;
 }
 
 function assertCase(name, condition, details) {
@@ -54,15 +102,30 @@ function assertCase(name, condition, details) {
   }
 }
 
+function createKVMock(seed = {}) {
+  const data = new Map(Object.entries(seed));
+  const kv = {
+    async get(key) {
+      if (this !== kv) throw new TypeError("Illegal invocation: KV get called without binding");
+      return data.has(key) ? data.get(key) : null;
+    },
+    async put(key, value) {
+      if (this !== kv) throw new TypeError("Illegal invocation: KV put called without binding");
+      data.set(key, value);
+    }
+  };
+  return kv;
+}
+
 async function readResponse(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("json")) return response.json();
   return response.text();
 }
 
-async function checkJson(fetchHandler, name, url, predicate) {
+async function checkJson(worker, name, url, predicate, env) {
   const started = Date.now();
-  const response = await workerFetch(fetchHandler, url);
+  const response = await workerFetch(worker, url, undefined, env);
   const body = await readResponse(response);
   assertCase(name, response.status === 200, `status ${response.status}`);
   assertCase(name, typeof body === "object", "expected JSON response");
@@ -77,14 +140,15 @@ async function checkJson(fetchHandler, name, url, predicate) {
 
 (async () => {
   configureProxy();
-  const fetchHandler = loadWorker();
+  configureCache();
+  const worker = await loadWorker();
 
-  const home = await workerFetch(fetchHandler, "https://ptgen.test/");
+  const home = await workerFetch(worker, "https://ptgen.test/");
   assertCase("home", home.status === 200, `status ${home.status}`);
   assertCase("home", (home.headers.get("content-type") || "").includes("text/html"), "expected HTML");
   console.log("home: ok");
 
-  const options = await workerFetch(fetchHandler, "https://ptgen.test/?site=douban&sid=1292052", {
+  const options = await workerFetch(worker, "https://ptgen.test/?site=douban&sid=1292052", {
     method: "OPTIONS",
     headers: {
       Origin: "https://example.test",
@@ -96,28 +160,40 @@ async function checkJson(fetchHandler, name, url, predicate) {
   assertCase("options", options.headers.get("Access-Control-Allow-Origin") === "*", "missing CORS header");
   console.log("options: ok");
 
-  await checkJson(fetchHandler, "douban-search", "https://ptgen.test/?source=douban&search=%E8%82%96%E7%94%B3%E5%85%8B", body => body.success && body.data && body.data.length > 0);
-  await checkJson(fetchHandler, "imdb-search", "https://ptgen.test/?source=imdb&search=shawshank", body => body.success && body.data && body.data.length > 0);
-  await checkJson(fetchHandler, "bangumi-search", "https://ptgen.test/?source=bangumi&search=cowboy", body => body.success && body.data && body.data.length > 0);
+  await checkJson(worker, "douban-search", "https://ptgen.test/?source=douban&search=%E8%82%96%E7%94%B3%E5%85%8B", body => body.success && body.data && body.data.length > 0);
+  await checkJson(worker, "imdb-search", "https://ptgen.test/?source=imdb&search=shawshank", body => body.success && body.data && body.data.length > 0);
+  await checkJson(worker, "bangumi-search", "https://ptgen.test/?source=bangumi&search=cowboy", body => body.success && body.data && body.data.length > 0);
 
-  await checkJson(fetchHandler, "douban-gen", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format && body.format.includes("◎豆瓣链接"));
-  await checkJson(fetchHandler, "douban-url", "https://ptgen.test/?url=https%3A%2F%2Fm.douban.com%2Fmovie%2Fsubject%2F1292052%2F", body => body.success && body.site === "douban");
-  await checkJson(fetchHandler, "imdb-gen", "https://ptgen.test/?site=imdb&sid=tt0111161", body => body.success && body.format && body.imdb_rating);
-  await checkJson(fetchHandler, "bangumi-gen", "https://ptgen.test/?site=bangumi&sid=2", body => body.success && body.format);
-  await checkJson(fetchHandler, "steam-gen", "https://ptgen.test/?site=steam&sid=620", body => body.success && body.screenshot && body.screenshot.length > 0);
-  await checkJson(fetchHandler, "steam-url", "https://ptgen.test/?url=https%3A%2F%2Fstore.steampowered.com%2Fapp%2F620%2FPortal_2%2F", body => body.success && body.site === "steam");
-  await checkJson(fetchHandler, "epic-gen", "https://ptgen.test/?site=epic&sid=fortnite", body => body.success && body.screenshot && body.screenshot.length > 0);
-  await checkJson(fetchHandler, "epic-url", "https://ptgen.test/?url=https%3A%2F%2Fstore.epicgames.com%2Fzh-CN%2Fp%2Ffortnite", body => body.success && body.site === "epic");
-  await checkJson(fetchHandler, "indienova-gen", "https://ptgen.test/?site=indienova&sid=dead-cells", body => body.success && body.screenshot && body.screenshot.length > 0);
-  await checkJson(fetchHandler, "bad-site", "https://ptgen.test/?site=missing&sid=1", body => !body.success && body.error === "Unknown value of key `site`.");
+  await checkJson(worker, "douban-gen", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format && body.format.includes("◎豆瓣链接"));
+  await checkJson(worker, "douban-url", "https://ptgen.test/?url=https%3A%2F%2Fm.douban.com%2Fmovie%2Fsubject%2F1292052%2F", body => body.success && body.site === "douban");
+  await checkJson(worker, "imdb-gen", "https://ptgen.test/?site=imdb&sid=tt0111161", body => body.success && body.format && body.imdb_rating);
+  await checkJson(worker, "bangumi-gen", "https://ptgen.test/?site=bangumi&sid=2", body => body.success && body.format);
+  await checkJson(worker, "steam-gen", "https://ptgen.test/?site=steam&sid=620", body => body.success && body.screenshot && body.screenshot.length > 0);
+  await checkJson(worker, "steam-url", "https://ptgen.test/?url=https%3A%2F%2Fstore.steampowered.com%2Fapp%2F620%2FPortal_2%2F", body => body.success && body.site === "steam");
+  await checkJson(worker, "epic-gen", "https://ptgen.test/?site=epic&sid=fortnite", body => body.success && body.screenshot && body.screenshot.length > 0);
+  await checkJson(worker, "epic-url", "https://ptgen.test/?url=https%3A%2F%2Fstore.epicgames.com%2Fzh-CN%2Fp%2Ffortnite", body => body.success && body.site === "epic");
+  await checkJson(worker, "indienova-gen", "https://ptgen.test/?site=indienova&sid=dead-cells", body => body.success && body.screenshot && body.screenshot.length > 0);
+  await checkJson(worker, "bad-site", "https://ptgen.test/?site=missing&sid=1", body => !body.success && body.error === "Unknown value of key `site`.");
 
-  globalThis.APIKEY = "secret";
-  const missingKey = await workerFetch(fetchHandler, "https://ptgen.test/?site=douban&sid=1292052");
+  const kv = createKVMock({
+    "info-douban-1292052": JSON.stringify({
+      success: true,
+      site: "douban",
+      format: "cached kv response"
+    })
+  });
+  await checkJson(worker, "kv-binding", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format === "cached kv response", {
+    PT_GEN_STORE: kv
+  });
+
+  const missingKey = await workerFetch(worker, "https://ptgen.test/?site=douban&sid=1292052", undefined, {APIKEY: "secret"});
   assertCase("apikey-missing", missingKey.status === 403, `status ${missingKey.status}`);
   console.log("apikey-missing: ok");
 
-  globalThis.DISABLE_SEARCH = "1";
-  await checkJson(fetchHandler, "disable-search", "https://ptgen.test/?source=douban&search=x&apikey=secret", body => !body.success && body.error === "this ptgen disallow search");
+  await checkJson(worker, "disable-search", "https://ptgen.test/?source=douban&search=x&apikey=secret", body => !body.success && body.error === "this ptgen disallow search", {
+    APIKEY: "secret",
+    DISABLE_SEARCH: "1"
+  });
 })().catch(error => {
   console.error(error);
   process.exit(1);

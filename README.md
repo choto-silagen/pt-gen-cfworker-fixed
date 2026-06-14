@@ -95,13 +95,13 @@ npm run build
 dist/worker.js
 ```
 
-在 Cloudflare 控制台里创建 Worker，然后进入在线编辑器：
+`dist/worker.js` 是打包后的 Module Worker 单文件。在 Cloudflare 控制台里创建 Worker，然后进入在线编辑器：
 
 1. 删除编辑器里默认生成的示例代码。
 2. 把 `dist/worker.js` 的全部内容复制进去。
 3. 保存并部署。
 
-注意：不要复制 `index.js`、`app.js` 或 `lib/` 里的源码。Cloudflare 控制台里要粘贴的是打包后的单文件 `dist/worker.js`。
+注意：不要复制 `index.js`、`app.js` 或 `lib/` 里的源码。Cloudflare 控制台里要粘贴的是打包后的单文件 `dist/worker.js`。如果控制台让你选择 Worker 格式，选择默认的 Module Worker。
 
 如果要配置 `APIKEY`、`DOUBAN_COOKIE`、`INDIENOVA_COOKIE`、`DISABLE_SEARCH`、`AUTHOR` 或 KV binding，可以在 Cloudflare 控制台的 Worker 设置页里添加变量、Secret 和 KV 绑定。变量名必须和上面的名字完全一致。
 

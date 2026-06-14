@@ -1,5 +1,7 @@
 import {handleFetch} from "./app";
 
-addEventListener("fetch", event => {
-  event.respondWith(handleFetch(event.request, event));
-});
+export default {
+  fetch(request, env, ctx) {
+    return handleFetch(request, ctx, env);
+  }
+};
