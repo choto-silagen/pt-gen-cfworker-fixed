@@ -136,6 +136,7 @@ async function checkJson(worker, name, url, predicate, env) {
     formatLength: (body.format || "").length
   }));
   console.log(`${name}: ok (${Date.now() - started}ms)`);
+  return body;
 }
 
 (async () => {
@@ -164,7 +165,15 @@ async function checkJson(worker, name, url, predicate, env) {
   await checkJson(worker, "imdb-search", "https://ptgen.test/?source=imdb&search=shawshank", body => body.success && body.data && body.data.length > 0);
   await checkJson(worker, "bangumi-search", "https://ptgen.test/?source=bangumi&search=cowboy", body => body.success && body.data && body.data.length > 0);
 
-  await checkJson(worker, "douban-gen", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format && body.format.includes("◎豆瓣链接"));
+  const doubanGen = await checkJson(worker, "douban-gen", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format && body.format.includes("◎豆瓣链接"));
+  const doubanPoster = (doubanGen.format || "").match(/\[img\](.*?)\[\/img\]/)[1];
+  const doubanPosterProxy = new URL(doubanPoster);
+  assertCase("douban-poster-proxy-url", doubanPosterProxy.origin === "https://ptgen.test" && doubanPosterProxy.searchParams.get("image").includes("doubanio.com"), doubanPoster);
+  console.log("douban-poster-proxy-url: ok");
+  const doubanPosterResponse = await workerFetch(worker, doubanPoster);
+  assertCase("douban-poster-proxy-fetch", doubanPosterResponse.status === 200 && (doubanPosterResponse.headers.get("content-type") || "").startsWith("image/"), `status ${doubanPosterResponse.status}`);
+  await doubanPosterResponse.arrayBuffer();
+  console.log("douban-poster-proxy-fetch: ok");
   await checkJson(worker, "douban-url", "https://ptgen.test/?url=https%3A%2F%2Fm.douban.com%2Fmovie%2Fsubject%2F1292052%2F", body => body.success && body.site === "douban");
   await checkJson(worker, "imdb-gen", "https://ptgen.test/?site=imdb&sid=tt0111161", body => body.success && body.format && body.imdb_rating);
   await checkJson(worker, "bangumi-gen", "https://ptgen.test/?site=bangumi&sid=2", body => body.success && body.format);
@@ -194,6 +203,7 @@ async function checkJson(worker, name, url, predicate, env) {
     APIKEY: "secret",
     DISABLE_SEARCH: "1"
   });
+  process.exit(0);
 })().catch(error => {
   console.error(error);
   process.exit(1);

@@ -111,7 +111,13 @@ dist/worker.js
 /?site=douban&sid=37116446
 ```
 
-返回的 `format` 应该以 `[img]https://img1.doubanio.com/view/photo/l_ratio_poster/public/p2931851430.jpg[/img]` 开头，并包含“潮汕阿嬷叶淑柔……”简介。
+豆瓣图片域名会对裸连请求返回 418。部署后的返回结果会把豆瓣海报自动改成当前 Worker 的图片代理地址，例如：
+
+```text
+[img]https://your-worker.workers.dev/?image=https%3A%2F%2Fimg1.doubanio.com%2Fview%2Fphoto%2F...[/img]
+```
+
+代理只允许已知图片域名，并会为豆瓣图片补 `Referer`。返回内容还应包含“潮汕阿嬷叶淑柔……”简介。
 
 ## 请求方式
 

@@ -34,7 +34,9 @@ export async function handleFetch(request, ctx = {}, env = {}) {
   if (!response) {
     try {
       let cache_key;
-      if (uri.pathname === '/' && uri.search === '') {
+      if (uri.searchParams.get("image")) {
+        response = await proxyImage(uri.searchParams.get("image"));
+      } else if (uri.pathname === '/' && uri.search === '') {
         response = makeIndexResponse();
       } else {
         if (getEnv('APIKEY') && uri.searchParams.get('apikey') !== getEnv('APIKEY')) {
@@ -118,11 +120,11 @@ export async function handleFetch(request, ctx = {}, env = {}) {
         }
 
         if (response_data) {
-          response = makeJsonResponse(response_data)
           const store = getBinding('PT_GEN_STORE');
           if (store && typeof store.put === "function" && typeof response_data.error === 'undefined') {
             await store.put(cache_key, JSON.stringify(response_data), {expirationTtl: 86400 * 2})
           }
+          response = makeJsonResponse(rewriteBlockedImageUrls(response_data, uri.origin))
         }
       }
 
@@ -181,4 +183,74 @@ function makeIndexResponse() {
       'Content-Type': 'text/html; charset=utf-8'
     },
   });
+}
+
+function rewriteBlockedImageUrls(value, origin) {
+  if (Array.isArray(value)) return value.map(item => rewriteBlockedImageUrls(item, origin));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, rewriteBlockedImageUrls(item, origin)])
+    );
+  }
+  if (typeof value !== "string") return value;
+
+  return value.replace(/https?:\/\/[^\s\[\]<>"')]+/g, url => proxiedImageUrl(url, origin) || url);
+}
+
+function proxiedImageUrl(url, origin) {
+  const target = parseImageUrl(url);
+  if (!target || !isProxyImageAllowed(target)) return "";
+
+  const proxy = new URL(origin);
+  proxy.pathname = "/";
+  proxy.search = "";
+  proxy.searchParams.set("image", target.href);
+  return proxy.toString();
+}
+
+async function proxyImage(rawUrl) {
+  const target = parseImageUrl(rawUrl);
+  if (!target || !isProxyImageAllowed(target)) {
+    return makeJsonRawResponse({error: "unsupported image url"}, {status: 400});
+  }
+
+  const headers = {
+    Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (compatible; pt-gen-cfworker-image-proxy/0.7)",
+    ...imageProxyHeaders(target)
+  };
+
+  const upstream = await fetch(target.href, {
+    headers,
+    redirect: "follow"
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      "Content-Type": upstream.headers.get("Content-Type") || "application/octet-stream",
+      "Cache-Control": upstream.ok ? "public, max-age=86400" : "no-store",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
+}
+
+function parseImageUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" || url.protocol === "http:" ? url : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function isProxyImageAllowed(url) {
+  return /(^|\.)doubanio\.com$/i.test(url.hostname);
+}
+
+function imageProxyHeaders(url) {
+  if (/(^|\.)doubanio\.com$/i.test(url.hostname)) {
+    return {Referer: "https://movie.douban.com/"};
+  }
+  return {};
 }
