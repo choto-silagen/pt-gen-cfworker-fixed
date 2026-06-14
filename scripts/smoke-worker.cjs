@@ -167,12 +167,16 @@ async function checkJson(worker, name, url, predicate, env) {
 
   const doubanGen = await checkJson(worker, "douban-gen", "https://ptgen.test/?site=douban&sid=1292052", body => body.success && body.format && body.format.includes("◎豆瓣链接"));
   const doubanPoster = (doubanGen.format || "").match(/\[img\](.*?)\[\/img\]/)[1];
-  const doubanPosterProxy = new URL(doubanPoster);
-  assertCase("douban-poster-proxy-url", doubanPosterProxy.origin === "https://ptgen.test" && doubanPosterProxy.searchParams.get("image").includes("doubanio.com"), doubanPoster);
-  console.log("douban-poster-proxy-url: ok");
-  const doubanPosterResponse = await workerFetch(worker, doubanPoster);
-  assertCase("douban-poster-proxy-fetch", doubanPosterResponse.status === 200 && (doubanPosterResponse.headers.get("content-type") || "").startsWith("image/"), `status ${doubanPosterResponse.status}`);
+  const doubanPosterCdn = new URL(doubanPoster);
+  assertCase("douban-poster-cdn-url", doubanPosterCdn.hostname === "douban.b-cdn.net" && doubanPosterCdn.pathname.includes("/view/photo/"), doubanPoster);
+  console.log("douban-poster-cdn-url: ok");
+  const doubanPosterResponse = await fetch(doubanPoster);
+  assertCase("douban-poster-cdn-fetch", doubanPosterResponse.status === 200 && (doubanPosterResponse.headers.get("content-type") || "").startsWith("image/"), `status ${doubanPosterResponse.status}`);
   await doubanPosterResponse.arrayBuffer();
+  console.log("douban-poster-cdn-fetch: ok");
+  const doubanProxyResponse = await workerFetch(worker, `https://ptgen.test/?image=${encodeURIComponent(`https://img1.doubanio.com${doubanPosterCdn.pathname}`)}`);
+  assertCase("douban-poster-proxy-fetch", doubanProxyResponse.status === 200 && (doubanProxyResponse.headers.get("content-type") || "").startsWith("image/"), `status ${doubanProxyResponse.status}`);
+  await doubanProxyResponse.arrayBuffer();
   console.log("douban-poster-proxy-fetch: ok");
   await checkJson(worker, "douban-url", "https://ptgen.test/?url=https%3A%2F%2Fm.douban.com%2Fmovie%2Fsubject%2F1292052%2F", body => body.success && body.site === "douban");
   await checkJson(worker, "imdb-gen", "https://ptgen.test/?site=imdb&sid=tt0111161", body => body.success && body.format && body.imdb_rating);

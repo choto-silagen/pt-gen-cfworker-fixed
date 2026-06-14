@@ -194,18 +194,39 @@ function rewriteBlockedImageUrls(value, origin) {
   }
   if (typeof value !== "string") return value;
 
-  return value.replace(/https?:\/\/[^\s\[\]<>"')]+/g, url => proxiedImageUrl(url, origin) || url);
+  return value.replace(/https?:\/\/[^\s\[\]<>"')]+/g, url => rewrittenImageUrl(url, origin) || url);
 }
 
-function proxiedImageUrl(url, origin) {
+function rewrittenImageUrl(url, origin) {
   const target = parseImageUrl(url);
   if (!target || !isProxyImageAllowed(target)) return "";
+
+  const cdn = doubanCdnImageUrl(target);
+  if (cdn) return cdn;
 
   const proxy = new URL(origin);
   proxy.pathname = "/";
   proxy.search = "";
   proxy.searchParams.set("image", target.href);
   return proxy.toString();
+}
+
+function doubanCdnImageUrl(target) {
+  if (!/(^|\.)doubanio\.com$/i.test(target.hostname)) return "";
+
+  const rawBase = (getEnv('DOUBAN_IMAGE_CDN') || "https://douban.b-cdn.net").trim();
+  if (!rawBase || ["proxy", "worker"].includes(rawBase.toLowerCase())) return "";
+
+  try {
+    const cdn = new URL(rawBase);
+    const basePath = cdn.pathname.replace(/\/$/, "");
+    cdn.pathname = `${basePath}${target.pathname}`;
+    cdn.search = target.search;
+    cdn.hash = "";
+    return cdn.toString();
+  } catch (e) {
+    return "";
+  }
 }
 
 async function proxyImage(rawUrl) {

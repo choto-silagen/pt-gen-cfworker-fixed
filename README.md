@@ -111,13 +111,13 @@ dist/worker.js
 /?site=douban&sid=37116446
 ```
 
-豆瓣图片域名会对裸连请求返回 418。部署后的返回结果会把豆瓣海报自动改成当前 Worker 的图片代理地址，例如：
+豆瓣图片域名会对裸连请求返回 418。部署后的返回结果默认会把豆瓣海报自动改成 `douban.b-cdn.net` 地址，例如：
 
 ```text
-[img]https://your-worker.workers.dev/?image=https%3A%2F%2Fimg1.doubanio.com%2Fview%2Fphoto%2F...[/img]
+[img]https://douban.b-cdn.net/view/photo/m_ratio_poster/public/p2928037442.jpg[/img]
 ```
 
-代理只允许已知图片域名，并会为豆瓣图片补 `Referer`。返回内容还应包含“潮汕阿嬷叶淑柔……”简介。
+如果要改回 Worker 自带图片代理，可以设置 `DOUBAN_IMAGE_CDN=proxy`。代理只允许已知图片域名，并会为豆瓣图片补 `Referer`。返回内容还应包含“潮汕阿嬷叶淑柔……”简介。
 
 ## 请求方式
 
@@ -153,6 +153,7 @@ dist/worker.js
 | `APIKEY` | 启用后请求必须携带 `&apikey={APIKEY}` |
 | `DISABLE_SEARCH` | 设置为非空值时禁用搜索 |
 | `DOUBAN_COOKIE` | 豆瓣 Cookie，可提高部分详情页访问成功率 |
+| `DOUBAN_IMAGE_CDN` | 豆瓣图片 CDN，默认 `https://douban.b-cdn.net`；设置为 `proxy` 时使用 Worker 图片代理 |
 | `INDIENOVA_COOKIE` | Indienova Cookie |
 | `PT_GEN_STORE` | Cloudflare KV binding，用于缓存生成结果 |
 
